@@ -11,3 +11,11 @@ backend/data/*.sqlite3
 backend/__pycache__
 backend/engine/__pycache__
 backend/routes/__pycache__
+venv/
+__pycache__/
+*.pyc
+.env
+instance/
+*.sqlite3
+.env.local
+node_modules/
