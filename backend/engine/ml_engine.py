@@ -166,7 +166,6 @@ def compute_safety_score(sensor_data: dict, rain_probability: float) -> float:
         "current_variation": float(sensor_data.get("current_variation") or 0.0),
         "dock_voltage":    float(sensor_data.get("voltage")          or 12.0),
         "charging_state":  int(bool(sensor_data.get("charging_state", True))),
-        "chance_of_rain":  float(rain_probability),
     }
 
     df = pd.DataFrame([row])[SAFETY_FEATURES]
