@@ -78,14 +78,6 @@ def ingest_telemetry():
         # ── ML Pipeline (runs in parallel with rule engine) ───────────────────
         ml_result = run_ml_pipeline({**payload, "zone": zone_result["zone"]})
 
-        # ── ML Pipeline ──────────────────────────────────────────────────────
-        from engine.ml_inference import evaluate_uav, from_sensor_data
-        try:
-            ml_input  = from_sensor_data(sd, zone_result["zone"])
-            ml_result = evaluate_uav(ml_input)
-        except Exception:
-            ml_result = None
-
         # ── Persist Sensor Record ─────────────────────────────────────────────
         cursor = conn.execute("""
             INSERT INTO sensor_history

@@ -36,10 +36,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# ── Model paths (relative to this file's parent directory) ───────────────────
-_HERE       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAIN_MODEL_PATH   = os.path.join(_HERE, "rain_regressor.pkl")
-SAFETY_MODEL_PATH = os.path.join(_HERE, "lgbm_model.joblib")
+# ── Model paths ───────────────────────────────────────────────────────────────
+# engine/ → backend/ → models/
+_BACKEND_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAIN_MODEL_PATH   = os.path.join(_BACKEND_DIR, "models", "rain_regressor.pkl")
+SAFETY_MODEL_PATH = os.path.join(_BACKEND_DIR, "models", "lgbm_model.joblib")
 
 # ── Feature list the safety model was trained on ──────────────────────────────
 # Order must match training. 'rain_probability' (chance_of_rain) is appended
@@ -156,7 +157,7 @@ def compute_safety_score(sensor_data: dict, rain_probability: float) -> float:
         "pressure_delta":  float(sensor_data.get("pressure_delta")  or 0.0),
         "light_level":     int(  sensor_data.get("ambient_light")   or 500),
         "rain_detected":   int(bool(sensor_data.get("rain_detected", False))),
-        "vibration_rms":   float(sensor_data.get("vibration_rms")   or _calc_vib_rms(sensor_data)),
+        "vibration_rms":   _calc_vib_rms(sensor_data),
         "vibration_trend": float(sensor_data.get("vibration_trend") or 0.0),
         "tilt_angle":      float(sensor_data.get("tilt_angle")      or 0.0),
         "sensor_fault_flag": int(bool(sensor_data.get("sensor_failure", False))),
@@ -227,8 +228,29 @@ def _zone_to_int(zone: str) -> int:
 
 
 def _calc_vib_rms(sensor_data: dict) -> float:
-    """Compute vibration RMS from x/y/z components if individual axes are present."""
+    """
+    Compute vibration RMS for the ML model feature.
+
+    The dataset's vibration_rms column ranges 0.1–1.5 (normalised sensor units).
+    The ESP32 sends raw axis values (vibration_x/y/z) in m/s² which can be much
+    larger. We normalise them into the same 0.1–1.5 band the model was trained on
+    so the model receives a meaningful input.
+
+    Priority:
+      1. Use vibration_rms directly if already provided (pre-normalised).
+      2. Compute from x/y/z axes, then scale into [0.1, 1.5].
+    """
+    # Use pre-computed value if present
+    if sensor_data.get("vibration_rms") is not None:
+        return min(1.5, max(0.1, float(sensor_data["vibration_rms"])))
+
     x = float(sensor_data.get("vibration_x") or 0.0)
     y = float(sensor_data.get("vibration_y") or 0.0)
     z = float(sensor_data.get("vibration_z") or 0.0)
-    return round(math.sqrt(x**2 + y**2 + z**2), 4)
+    raw_rms = math.sqrt(x**2 + y**2 + z**2)
+
+    # Scale: raw values from MPU6050 in m/s² typically range 0–20+.
+    # Map into model's expected range [0.1, 1.5] proportionally.
+    # 0 m/s² → 0.1 (idle baseline), 15+ m/s² → 1.5 (max spike)
+    scaled = 0.1 + (raw_rms / 15.0) * 1.4
+    return round(min(1.5, max(0.1, scaled)), 4)
