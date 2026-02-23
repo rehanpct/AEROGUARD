@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAIN_MODEL_PATH   = os.path.join(_HERE, "rain_regressor.pkl")
-SAFETY_MODEL_PATH = os.path.join(_HERE, "lgbm_model.joblib")
+_MODELS_DIR       = os.path.join(_HERE, "models")
+RAIN_MODEL_PATH   = os.path.join(_MODELS_DIR, "rain_regressor.pkl")
+SAFETY_MODEL_PATH = os.path.join(_MODELS_DIR, "lgbm_model (3).joblib")
 
 # ─────────────────────────────────────────────────────────────
 # MODEL LOADING

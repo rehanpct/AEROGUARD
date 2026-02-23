@@ -32,10 +32,11 @@ import joblib
 
 # ── Model paths (relative to this file) ──────────────────────────────────────
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MODELS_DIR           = os.path.join(_BASE, "models")
 
-_RAIN_MODEL_PATH     = os.path.join(_BASE, "rain_regressor.pkl")
-_SAFETY_MODEL_PATH   = os.path.join(_BASE, "uav_safety_regressor.pkl")
-_SAFETY_FEATURES_PATH = os.path.join(_BASE, "safety_features.pkl")
+_RAIN_MODEL_PATH      = os.path.join(_MODELS_DIR, "rain_regressor.pkl")
+_SAFETY_MODEL_PATH    = os.path.join(_MODELS_DIR, "lgbm_model (3).joblib")
+_SAFETY_FEATURES_PATH = os.path.join(_MODELS_DIR, "safety_features.pkl")
 
 # ── Lazy-loaded singletons (loaded once on first call) ────────────────────────
 _rain_model    = None

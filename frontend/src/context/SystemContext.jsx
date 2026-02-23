@@ -173,8 +173,11 @@ export function SystemProvider({ children }) {
   // ── Main poll loop ──────────────────────────────────────────────────────────
   useEffect(() => {
     let active = true;
+    const pollingRef = { inFlight: false };  // single-flight guard
 
     const poll = async () => {
+      if (pollingRef.inFlight) return;       // skip if previous fetch still running
+      pollingRef.inFlight = true;
       try {
         const res = await fetch(`${BACKEND_URL}/status`, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -207,6 +210,8 @@ export function SystemProvider({ children }) {
         setBackendOnline(false);
         // Simulate while offline
         setState(prev => buildSimState(prev, failsafeActive));
+      } finally {
+        pollingRef.inFlight = false;         // release guard regardless of outcome
       }
     };
 

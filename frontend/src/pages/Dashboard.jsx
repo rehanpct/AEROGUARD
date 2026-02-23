@@ -268,32 +268,55 @@ export default function Dashboard() {
 
                 {/* ── 6. Proximity & Obstacle ───────────────────────────────────── */}
                 <Card title="Proximity & Obstacle Detection" accent="#F59E0B">
-                    <Row label="Distance (Ultrasonic)" value={fmt(sen.distance, 1, " cm")}
-                        color={clampColor(sen.distance ?? 999, 30, 10, true)} />
-                    <Row label="IR Obstacle" value={sen.ir === 1 ? "⚠ Detected" : "Clear"}
-                        color={sen.ir === 1 ? "#ef4444" : "#22c55e"} />
-                    <Row label="PIR Motion" value={sen.pir === 1 ? "⚠ Motion" : "None"}
-                        color={sen.pir === 1 ? "#facc15" : "#22c55e"} />
-                    {/* Visual distance bar */}
-                    <div style={{
-                        marginTop: 10, background: "rgba(245,158,11,0.06)",
-                        borderRadius: 8, padding: "8px 12px"
-                    }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, color: "#64748b" }}>Clearance</span>
-                            <span style={{ fontSize: 11, color: clampColor(sen.distance ?? 999, 30, 10, true) }}>
-                                {fmt(sen.distance, 1, " cm")}
-                            </span>
-                        </div>
-                        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 4, height: 6 }}>
-                            <div style={{
-                                height: 6, borderRadius: 4,
-                                width: `${Math.min(100, ((sen.distance ?? 200) / 200) * 100)}%`,
-                                background: clampColor(sen.distance ?? 999, 30, 10, true),
-                                transition: "width 0.5s ease",
-                            }} />
-                        </div>
-                    </div>
+                    {(() => {
+                        // IR: ACTIVE-LOW — ir===0 means obstacle detected
+                        const irVal = sen.ir ?? 1;
+                        const obstacleDetected = (irVal === 0);
+
+                        // Ultrasonic: distance===-1 or <=0 is invalid / no echo
+                        const rawDistance = sen.distance ?? -1;
+                        const validDistance = rawDistance > 0;
+                        const distanceText = validDistance
+                            ? `${rawDistance.toFixed(1)} cm`
+                            : "No Echo";
+                        const distanceColor = validDistance
+                            ? clampColor(rawDistance, 30, 10, true)
+                            : "#64748b";
+                        const barWidth = validDistance
+                            ? Math.min(100, (rawDistance / 200) * 100)
+                            : 0;
+
+                        return (
+                            <>
+                                <Row label="Distance (Ultrasonic)" value={distanceText}
+                                    color={distanceColor} />
+                                <Row label="IR Obstacle" value={obstacleDetected ? "⚠ Detected" : "Clear"}
+                                    color={obstacleDetected ? "#ef4444" : "#22c55e"} />
+                                <Row label="PIR Motion" value={sen.pir === 1 ? "⚠ Motion" : "None"}
+                                    color={sen.pir === 1 ? "#facc15" : "#22c55e"} />
+                                {/* Visual distance bar */}
+                                <div style={{
+                                    marginTop: 10, background: "rgba(245,158,11,0.06)",
+                                    borderRadius: 8, padding: "8px 12px"
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                        <span style={{ fontSize: 11, color: "#64748b" }}>Clearance</span>
+                                        <span style={{ fontSize: 11, color: distanceColor }}>
+                                            {distanceText}
+                                        </span>
+                                    </div>
+                                    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 4, height: 6 }}>
+                                        <div style={{
+                                            height: 6, borderRadius: 4,
+                                            width: `${barWidth}%`,
+                                            background: distanceColor,
+                                            transition: "width 0.5s ease",
+                                        }} />
+                                    </div>
+                                </div>
+                            </>
+                        );
+                    })()}
                 </Card>
 
                 {/* ── 7. Electrical – Current Draw ──────────────────────────────── */}

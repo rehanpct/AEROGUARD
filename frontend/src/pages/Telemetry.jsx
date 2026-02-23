@@ -122,13 +122,33 @@ export default function Telemetry() {
 
                 {/* Proximity & detection */}
                 <Section title="Proximity & Detection Sensors">
-                    <MetricBox label="Ultrasonic (cm)" value={fmt(sen.distance, 1, " cm")}
-                        sub="obstacle distance"
-                        color={(sen.distance ?? 999) < 10 ? "#ef4444" : (sen.distance ?? 999) < 30 ? "#facc15" : "#22c55e"} />
-                    <MetricBox label="IR Obstacle" value={sen.ir === 1 ? "Detected" : "Clear"}
-                        color={sen.ir === 1 ? "#ef4444" : "#22c55e"} />
-                    <MetricBox label="PIR Motion" value={sen.pir === 1 ? "Motion" : "None"}
-                        color={sen.pir === 1 ? "#facc15" : "#22c55e"} />
+                    {(() => {
+                        // IR: ACTIVE-LOW — ir===0 means obstacle detected
+                        const irVal = sen.ir ?? 1;
+                        const obstacleDetected = (irVal === 0);
+
+                        // Ultrasonic: distance===-1 or <=0 is invalid / no echo
+                        const rawDistance = sen.distance ?? -1;
+                        const validDistance = rawDistance > 0;
+                        const distanceText = validDistance
+                            ? `${rawDistance.toFixed(1)} cm`
+                            : "No Echo";
+                        const distanceColor = validDistance
+                            ? ((rawDistance < 10) ? "#ef4444" : (rawDistance < 30) ? "#facc15" : "#22c55e")
+                            : "#64748b";
+
+                        return (
+                            <>
+                                <MetricBox label="Ultrasonic (cm)" value={distanceText}
+                                    sub="obstacle distance"
+                                    color={distanceColor} />
+                                <MetricBox label="IR Obstacle" value={obstacleDetected ? "Detected" : "Clear"}
+                                    color={obstacleDetected ? "#ef4444" : "#22c55e"} />
+                                <MetricBox label="PIR Motion" value={sen.pir === 1 ? "Motion" : "None"}
+                                    color={sen.pir === 1 ? "#facc15" : "#22c55e"} />
+                            </>
+                        );
+                    })()}
                 </Section>
 
                 {/* Water & electrical */}
