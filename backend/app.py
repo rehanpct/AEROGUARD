@@ -34,6 +34,19 @@ def index():
 
 if __name__ == "__main__":
     init_db()
+
+    # ── Optional dev sensor simulator ─────────────────────────────────────────
+    # If dev_sensor_sim.py exists on disk it is imported and started as a
+    # background thread.  If the file is absent (production / hardware mode)
+    # this block is silently skipped — no change in behaviour whatsoever.
+    try:
+        import dev_sensor_sim as _sim
+        _sim.maybe_start(mode="rotate")
+        print("[AeroGuard] Dev simulator loaded — will auto-start if no hardware detected.")
+    except ImportError:
+        pass  # dev_sensor_sim.py not present — hardware-only mode, carry on
+    # ──────────────────────────────────────────────────────────────────────────
+
     # debug=False + use_reloader=False: eliminates the Werkzeug double-process
     # overhead that runs a second Python interpreter for file watching.
     # threaded=True: allows concurrent handling of multiple frontend requests.

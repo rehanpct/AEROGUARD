@@ -17,6 +17,14 @@ from engine.risk_engine import SensorData
 log = logging.getLogger(__name__)
 telemetry_bp = Blueprint("telemetry", __name__)
 
+# ── Optional simulator integration ───────────────────────────────────────────
+# If dev_sensor_sim.py is present, import it so we can signal when real
+# hardware arrives. If the file doesn't exist this is silently skipped.
+try:
+    import dev_sensor_sim as _dev_sim
+except ImportError:
+    _dev_sim = None  # type: ignore[assignment]
+
 from constants import GPS_FALLBACK_LAT as FALLBACK_LAT, GPS_FALLBACK_LON as FALLBACK_LON, GPS_FALLBACK_NAME as FALLBACK_NAME
 
 
@@ -85,6 +93,9 @@ def _build_ml_input(payload: dict, zone: str) -> dict:
 
 @telemetry_bp.route("/telemetry", methods=["POST"])
 def ingest_telemetry():
+    # Signal simulator to stop (no-op if sim file not loaded)
+    if _dev_sim is not None:
+        _dev_sim.signal_hardware_connected()
 
     payload = request.get_json(force=True, silent=True) or {}
 
