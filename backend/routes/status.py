@@ -15,6 +15,11 @@ from engine.ml_inference import generate_explanation_llm, compute_rain_probabili
 log = logging.getLogger(__name__)
 status_bp = Blueprint("status", __name__)
 
+# ── Response cache ────────────────────────────────────────────────────────────
+# Keyed on (sensor_id, risk_id). If neither has changed since last poll,
+# the cached dict is returned directly — no ML work, no extra DB queries.
+_status_cache: dict = {"sensor_id": None, "risk_id": None, "payload": None}
+
 
 # ── GET /api/status ────────────────────────────────────────────────────────────
 
@@ -36,15 +41,22 @@ def get_status():
     """
     conn = get_db()
     try:
-        # Latest sensor reading
-        row = conn.execute("""
-            SELECT * FROM sensor_history ORDER BY id DESC LIMIT 1
-        """).fetchone()
+        # ── Quick ID check for cache hit ──────────────────────────────────────
+        # Fetch only the IDs first — much cheaper than SELECT *
+        _sid_row  = conn.execute("SELECT id FROM sensor_history ORDER BY id DESC LIMIT 1").fetchone()
+        _rid_row  = conn.execute("SELECT id FROM risk_scores    ORDER BY id DESC LIMIT 1").fetchone()
+        _sid = _sid_row[0] if _sid_row else None
+        _rid = _rid_row[0] if _rid_row else None
 
-        # Latest risk assessment
-        risk_row = conn.execute("""
-            SELECT * FROM risk_scores ORDER BY id DESC LIMIT 1
-        """).fetchone()
+        if (_sid is not None and
+                _sid == _status_cache["sensor_id"] and
+                _rid == _status_cache["risk_id"] and
+                _status_cache["payload"] is not None):
+            return jsonify(_status_cache["payload"])
+
+        # ── Full fetch (cache miss) ────────────────────────────────────────────
+        row      = conn.execute("SELECT * FROM sensor_history ORDER BY id DESC LIMIT 1").fetchone()
+        risk_row = conn.execute("SELECT * FROM risk_scores    ORDER BY id DESC LIMIT 1").fetchone()
 
         if row is None:
             # Generate a default explanation with safe values
@@ -104,8 +116,12 @@ def get_status():
             rain_prob = round(min(1.0, (humidity / 100) * 0.4 + (water / 1023) * 0.6), 4)
 
         # ML explanation – build sensor dict from latest row
+        # safety_score stored in risk_scores is inverted: 100 = perfectly safe.
+        # safety_decision() uses raw model scale where higher = more dangerous.
+        # Convert back before calling it.
         _ml_score = r.get("safety_score") or 20.0
-        _ml_decision_str = safety_decision(float(_ml_score))
+        _ml_risk_score = 100.0 - float(_ml_score)   # invert: higher = more dangerous
+        _ml_decision_str = safety_decision(_ml_risk_score)
         _sensor_for_ml = {
             "zone_encoded":      {"GREEN": 0, "YELLOW": 1, "RED": 2}.get(str(s.get("zone", "GREEN")).upper(), 1),
             "hdop":             s.get("hdop") or 1.0,
@@ -131,7 +147,7 @@ def get_status():
             log.warning("ML explanation error: %s", e)
             ml_explanation = "ML explanation unavailable."
 
-        return jsonify({
+        _payload = {
             # ── Top-level risk ────────────────────────────────────────────────
             "risk_index":    round(risk_index, 2),
             "risk_level":    risk_level,                # SAFE | CAUTION | UNSAFE
@@ -211,7 +227,13 @@ def get_status():
             # ── ML Engine output ──────────────────────────────────────────────
             "ml_explanation": ml_explanation,
             "ml_decision":    _ml_decision_str,
-        })
+        }
+
+        # ── Store in cache ────────────────────────────────────────────────────
+        _status_cache["sensor_id"] = _sid
+        _status_cache["risk_id"]   = _rid
+        _status_cache["payload"]   = _payload
+        return jsonify(_payload)
 
     finally:
         conn.close()

@@ -482,8 +482,8 @@ export default function Dashboard() {
                                     ml_decision === "Caution" ? "rgba(250,204,21,0.12)" :
                                         "rgba(34,197,94,0.12)",
                             border: `1px solid ${ml_decision === "Not Safe" ? "rgba(239,68,68,0.5)" :
-                                    ml_decision === "Caution" ? "rgba(250,204,21,0.4)" :
-                                        "rgba(34,197,94,0.4)"}`,
+                                ml_decision === "Caution" ? "rgba(250,204,21,0.4)" :
+                                    "rgba(34,197,94,0.4)"}`,
                             color:
                                 ml_decision === "Not Safe" ? "#ef4444" :
                                     ml_decision === "Caution" ? "#facc15" : "#22c55e",
@@ -492,7 +492,7 @@ export default function Dashboard() {
                                 ml_decision === "Caution" ? "⚠ Caution" : "✓ Safe to Fly"}
                         </div>
                         <div style={{ fontSize: 12, color: "#64748b" }}>
-                            ML Safety Score: <span style={{
+                            Combined Safety Score: <span style={{
                                 fontWeight: 700,
                                 color:
                                     ml_decision === "Not Safe" ? "#ef4444" :

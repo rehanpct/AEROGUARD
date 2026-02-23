@@ -10,7 +10,7 @@ import React, {
 
 // ─── Backend config ──────────────────────────────────────────────────────────
 const BACKEND_URL = "http://localhost:5000/api";
-const POLL_MS = 2000;
+const POLL_MS = 3000;   // 3 s — hardware sensors don't update faster than this
 
 // ─── GPS Fallback ─────────────────────────────────────────────────────────────
 const FALLBACK_LAT = 10.8505;
@@ -128,7 +128,7 @@ function transformApiResponse(json) {
     triggered_l3: json.triggered_l3 ?? [],
     // ML Engine
     ml_explanation: json.ml_explanation ?? "",
-    ml_decision:    json.ml_decision    ?? "Safe",
+    ml_decision: json.ml_decision ?? "Safe",
   };
 }
 
@@ -194,7 +194,24 @@ export function SystemProvider({ children }) {
         if (!active) return;
 
         const transformed = transformApiResponse(json);
-        setState(transformed);
+
+        // ── Skip state update if nothing meaningful changed ─────────────────────────
+        // Avoids a React re-render and avoids spamming the history chart
+        // when the backend is up but no new sensor data has arrived.
+        setState(prev => {
+          if (
+            prev &&
+            prev.risk_level === transformed.risk_level &&
+            prev.risk_index === transformed.risk_index &&
+            prev.safety_score === transformed.safety_score &&
+            prev.timestamp === transformed.timestamp &&
+            prev.ml_explanation === transformed.ml_explanation &&
+            prev.ml_decision === transformed.ml_decision
+          ) {
+            return prev;  // bail out — same data, no re-render
+          }
+          return transformed;
+        });
         setBackendOnline(true);
 
         // Auto-log significant events
@@ -288,7 +305,7 @@ export function SystemProvider({ children }) {
 
     // ML Engine
     ml_explanation: state.ml_explanation ?? "",
-    ml_decision:    state.ml_decision    ?? "Safe",
+    ml_decision: state.ml_decision ?? "Safe",
   };
 
   return (

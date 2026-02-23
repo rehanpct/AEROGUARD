@@ -116,8 +116,8 @@ def predict():
 
     # Final decision: L1 rule always wins, then ML
     final_decision = rule_result["classification"]
-    if not rule_result["hard_lock"] and ml_result.get("decision"):
-        final_decision = ml_result["decision"]
+    if not rule_result["hard_lock"] and ml_result.get("ml_classification"):
+        final_decision = ml_result["ml_classification"]
 
     return jsonify({
         "zone":        zone_result,

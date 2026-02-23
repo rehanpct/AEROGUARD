@@ -34,4 +34,7 @@ def index():
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # debug=False + use_reloader=False: eliminates the Werkzeug double-process
+    # overhead that runs a second Python interpreter for file watching.
+    # threaded=True: allows concurrent handling of multiple frontend requests.
+    app.run(debug=False, use_reloader=False, threaded=True, host="0.0.0.0", port=5000)

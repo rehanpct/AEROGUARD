@@ -177,8 +177,11 @@ def ingest_telemetry():
     rain_prob = ml_result.get("rain_probability", 0.1)
 
     # ── Derive risk_index from ML safety_score ─────────────────────────────────
-    # ML safety_score: higher = more dangerous (>=70 Not Safe, >=40 Caution, <40 Safe)
-    # Map directly to risk_index (same numeric value, 0-100).
+    # ml_engine.run_ml_pipeline() returns the raw model prediction as "safety_score"
+    # (higher = more dangerous: >=70 Not Safe, >=40 Caution, <40 Safe).
+    # This raw value is used as risk_index (0–100). At line 235 it is inverted
+    # before being stored in the DB, so the stored "safety_score" column always
+    # means higher = safer (consistent with the UI and status.py conventions).
     ml_safety_raw  = ml_result.get("safety_score") or risk["safety_score"]
     ml_risk_index  = float(min(100.0, max(0.0, ml_safety_raw)))
 

@@ -153,6 +153,15 @@ def init_db():
         )
     """)
 
+    # ── Performance Indexes ───────────────────────────────────────────────────────
+    # Speeds up ORDER BY id DESC LIMIT 1 queries (used on every /api/status poll)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sensor_history_id ON sensor_history(id DESC)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_risk_scores_id    ON risk_scores(id DESC)")
+    # Speeds up WHERE timestamp >= ... range queries (used by /api/status/summary and /api/logs/risk)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_risk_scores_ts    ON risk_scores(timestamp)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sensor_history_ts ON sensor_history(timestamp)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_ts         ON events(timestamp)")
+
     conn.commit()
     conn.close()
     print(f"[AeroGuard] Database ready: {DB_PATH}")

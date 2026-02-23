@@ -42,14 +42,17 @@ _SAFETY_FEATURES_PATH = os.path.join(_MODELS_DIR, "safety_features.pkl")
 _rain_model    = None
 _safety_model  = None
 _safety_features: list[str] | None = None
+_safety_feat_index: dict | None = None   # column_name → array position (fast lookup)
 
 
 def _load_models():
-    global _rain_model, _safety_model, _safety_features
+    global _rain_model, _safety_model, _safety_features, _safety_feat_index
     if _rain_model is None:
-        _rain_model    = joblib.load(_RAIN_MODEL_PATH)
-        _safety_model  = joblib.load(_SAFETY_MODEL_PATH)
+        _rain_model      = joblib.load(_RAIN_MODEL_PATH)
+        _safety_model    = joblib.load(_SAFETY_MODEL_PATH)
         _safety_features = joblib.load(_SAFETY_FEATURES_PATH)
+        # Pre-build column → index map so we never re-create DataFrames
+        _safety_feat_index = {col: i for i, col in enumerate(_safety_features)}
 
 
 # ── Zone encoding helper ──────────────────────────────────────────────────────
@@ -67,11 +70,13 @@ def compute_rain_probability(temperature: float, humidity: float) -> float:
     """
     Predict chance_of_rain from temperature and humidity,
     then squash through a sigmoid for a 0-1 probability.
-    Mirrors the reference script exactly.
+    Uses a numpy array instead of a pd.DataFrame to avoid per-call
+    DataFrame construction overhead (~5-20ms).
     """
     _load_models()
-    df = pd.DataFrame([[temperature, humidity]], columns=["temperature", "humidity"])
-    predicted_precip = _rain_model.predict(df)[0]
+    # numpy array is accepted directly by sklearn/lgbm predict()
+    X = np.array([[temperature, humidity]], dtype=np.float64)
+    predicted_precip = _rain_model.predict(X)[0]
     predicted_precip = max(predicted_precip, 0.0)
     rain_probability = 1.0 / (1.0 + np.exp(-predicted_precip / 5.0))
     return float(rain_probability)
@@ -84,15 +89,17 @@ def compute_safety_score(sensor_data: dict, rain_probability: float) -> float:
     Predict the UAV safety score (0-100) from sensor features.
     sensor_data must contain all fields expected by safety_features.pkl.
     rain_probability is injected as 'chance_of_rain'.
+    Uses a pre-built column index so no DataFrame or reindex() is needed.
     """
     _load_models()
+    # Build feature vector in the exact column order the model expects
     data = dict(sensor_data)
     data["chance_of_rain"] = rain_probability
-    df_input = pd.DataFrame([data])
-
-    # Ensure correct column order and only required features
-    df_input = df_input.reindex(columns=_safety_features, fill_value=0)
-    score = _safety_model.predict(df_input)[0]
+    n = len(_safety_features)
+    X = np.zeros((1, n), dtype=np.float64)
+    for col, idx in _safety_feat_index.items():
+        X[0, idx] = float(data.get(col, 0) or 0)
+    score = _safety_model.predict(X)[0]
     return float(np.clip(score, 0.0, 100.0))
 
 
@@ -110,7 +117,124 @@ def safety_decision(score: float) -> str:
     else:
         return "Safe"
 
-# ── 4. LLM explanation via Ollama ───────
+# ── 4. Rule-based explanation ─────────────────────────────────────────────────
+
+def generate_explanation(sensor_data: dict, rain_probability: float,
+                         score: float, decision: str) -> str:
+    """
+    Generate a structured multi-line explanation that names every contributing
+    risk factor with its specific sensor value.  Output format matches the
+    ExplainLine colour logic in Dashboard.jsx:
+      '  ⚠ CRITICAL: …'  → red
+      '  ⚡ CAUTION: …'  → yellow
+      '  ✓ …'            → green
+    """
+    zone_map = {0: "GREEN", 1: "YELLOW", 2: "RED"}
+    zone = zone_map.get(sensor_data.get("zone_encoded", 1), "YELLOW")
+
+    critical_lines = []
+    caution_lines  = []
+    ok_lines       = []
+
+    # ── Zone ──────────────────────────────────────────────────────────────────
+    if zone == "RED":
+        critical_lines.append("Zone is RED (restricted airspace) — flight is prohibited.")
+    elif zone == "YELLOW":
+        caution_lines.append("Zone is YELLOW (caution area) — proceed only if authorised.")
+    else:
+        ok_lines.append("Zone is GREEN (permitted airspace).")
+
+    # ── Rain / Humidity ───────────────────────────────────────────────────────
+    rain_pct = round(rain_probability * 100)
+    if rain_probability > 0.7:
+        critical_lines.append(f"Rain probability is {rain_pct}% — precipitation likely, do not fly.")
+    elif rain_probability > 0.4:
+        caution_lines.append(f"Rain probability is {rain_pct}% — monitor weather closely.")
+    else:
+        ok_lines.append(f"Rain probability is {rain_pct}% (acceptable).")
+
+    humidity = sensor_data.get("humidity", 0) or 0
+    if humidity > 90:
+        critical_lines.append(f"Humidity is critically high at {humidity}% — condensation risk.")
+    elif humidity > 80:
+        caution_lines.append(f"Humidity is elevated at {humidity}%.")
+    else:
+        ok_lines.append(f"Humidity is {humidity}% (normal).")
+
+    # ── GPS Quality ───────────────────────────────────────────────────────────
+    hdop = sensor_data.get("hdop", 0) or 0
+    sats = sensor_data.get("satellites", 99) or 99
+    if hdop > 5.0:
+        critical_lines.append(f"GPS accuracy is very poor — HDOP={hdop:.1f} (should be <2.0).")
+    elif hdop > 2.5:
+        caution_lines.append(f"GPS accuracy is marginal — HDOP={hdop:.1f}.")
+    else:
+        ok_lines.append(f"GPS HDOP={hdop:.1f} (good accuracy).")
+
+    if sats < 3:
+        critical_lines.append(f"Only {sats} satellites visible — GPS unreliable.")
+    elif sats < 5:
+        caution_lines.append(f"Low satellite count: {sats} (minimum 5 recommended).")
+    else:
+        ok_lines.append(f"Satellite count: {sats} (sufficient).")
+
+    # ── Vibration ─────────────────────────────────────────────────────────────
+    vib = sensor_data.get("vibration_rms", 0) or 0
+    if vib > 3.0:
+        critical_lines.append(f"Vibration RMS={vib:.2f} — severe mechanical abnormality.")
+    elif vib > 1.5:
+        caution_lines.append(f"Vibration RMS={vib:.2f} — elevated; check motor mounts.")
+    else:
+        ok_lines.append(f"Vibration RMS={vib:.2f} (normal).")
+
+    # ── Sensor Faults & Telemetry ─────────────────────────────────────────────
+    if sensor_data.get("sensor_fault_flag", 0):
+        critical_lines.append("Sensor fault flag is ACTIVE — system integrity compromised.")
+    else:
+        ok_lines.append("No sensor faults detected.")
+
+    if sensor_data.get("telemetry_loss", 0):
+        critical_lines.append("Telemetry loss has been reported — communication unreliable.")
+    else:
+        ok_lines.append("Telemetry link is stable.")
+
+    # ── Build output ──────────────────────────────────────────────────────────
+    lines = [f"UAV Safety Assessment — Decision: {decision} (score: {score:.1f}/100)", ""]
+
+    lines.append("Risk Factors:")
+    for line in critical_lines:
+        lines.append(f"  ⚠ CRITICAL: {line}")
+    for line in caution_lines:
+        lines.append(f"  ⚡ CAUTION: {line}")
+    if not critical_lines and not caution_lines:
+        lines.append("  ✓ No significant risk factors detected.")
+    for line in ok_lines:
+        lines.append(f"  ✓ {line}")
+
+    lines.append("")
+    if decision == "Not Safe":
+        rec = "Do NOT launch. Resolve all critical issues before attempting flight."
+    elif decision == "Caution":
+        rec = "Exercise caution. Address warnings before extending the mission."
+    else:
+        rec = "Conditions are acceptable. Conduct normal pre-flight checklist and proceed."
+    lines.append(f"Operational Recommendation:\n  {rec}")
+
+    lines.append("")
+    zone_label = f"zone {zone} ({'restricted' if zone == 'RED' else 'caution' if zone == 'YELLOW' else 'permitted'})"
+    if critical_lines:
+        cause = "critical fault(s)"
+    elif caution_lines:
+        cause = "caution-level conditions"
+    else:
+        cause = "nominal readings"
+    lines.append(f"Summary: ML safety score {score:.1f}/100 in {zone_label}.")
+    lines.append(f"Decision '{decision}' based on {cause}.")
+
+    return "\n".join(lines)
+
+
+# ── 5. LLM explanation via Ollama ─────────────────────────────────────────────
 
 def generate_explanation_llm(sensor_data: dict, rain_probability: float,
                               score: float, decision: str,
@@ -121,27 +245,30 @@ def generate_explanation_llm(sensor_data: dict, rain_probability: float,
     Falls back to generate_explanation() if the server is unreachable.
     """
     import requests as _requests
-    prompt = f"""
-You are an AI UAV Safety Officer.
-Sensor Data:
-Zone: {sensor_data['zone_encoded']}
-HDOP: {sensor_data['hdop']}
-Satellites: {sensor_data['satellites']}
-Temperature: {sensor_data['temperature']} °C
-Humidity: {sensor_data['humidity']} %
-Rain Probability: {rain_probability}
-Vibration RMS: {sensor_data['vibration_rms']}
-Sensor Fault: {sensor_data['sensor_fault_flag']}
-Telemetry Loss: {sensor_data['telemetry_loss']}
-Predicted Safety Score: {score}
-Final Decision: {decision}
-Explain clearly:
-1. Why this decision was made.
-2. Key risk contributors.
-3. Any abnormal sensor values.
-4. Operational recommendation.
-5. Two-line summary.
-"""
+    prompt = (
+        f"You are an AI UAV Safety Officer.\n"
+        f"Sensor Data:\n"
+        f"  Zone: {sensor_data.get('zone_encoded')}, HDOP: {sensor_data.get('hdop')}, "
+        f"Satellites: {sensor_data.get('satellites')}\n"
+        f"  Temperature: {sensor_data.get('temperature')} °C, "
+        f"Humidity: {sensor_data.get('humidity')} %, Rain Probability: {rain_probability:.2f}\n"
+        f"  Vibration RMS: {sensor_data.get('vibration_rms')}, "
+        f"Sensor Fault: {sensor_data.get('sensor_fault_flag')}, "
+        f"Telemetry Loss: {sensor_data.get('telemetry_loss')}\n"
+        f"  Predicted Safety Score: {score}, Final Decision: {decision}\n"
+        f"Explain: (1) why this decision, (2) key risks, "
+        f"(3) abnormal values, (4) recommendation, (5) two-line summary."
+    )
+    try:
+        resp = _requests.post(
+            ollama_url,
+            json={"model": model, "prompt": prompt, "stream": False},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json().get("response", "").strip()
+    except Exception:
+        return generate_explanation(sensor_data, rain_probability, score, decision)
 
 # ── 5. Master pipeline (mirrors reference script's evaluate_uav) ──────────────
 
@@ -169,6 +296,8 @@ def evaluate_uav(sensor_data: dict, use_llm: bool = False,
 
     if use_llm:
         explanation = generate_explanation_llm(sensor_data, rain_prob, score, decision, ollama_url)
+    else:
+        explanation = generate_explanation(sensor_data, rain_prob, score, decision)
 
     return {
         "rain_probability": round(rain_prob, 4),
