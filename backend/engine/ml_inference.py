@@ -122,9 +122,11 @@ def safety_decision(score: float) -> str:
 def generate_explanation(sensor_data: dict, rain_probability: float,
                          score: float, decision: str) -> str:
     """
-    Generate a structured multi-line explanation that names every contributing
-    risk factor with its specific sensor value.  Output format matches the
-    ExplainLine colour logic in Dashboard.jsx:
+    Generate a structured multi-line explanation based on live sensor values.
+    Score is intentionally omitted from output — the decision + per-sensor
+    breakdown is the authoritative signal shown in the UI.
+
+    Output format matches Dashboard.jsx ExplainLine colour logic:
       '  ⚠ CRITICAL: …'  → red
       '  ⚡ CAUTION: …'  → yellow
       '  ✓ …'            → green
@@ -144,6 +146,17 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
     else:
         ok_lines.append("Zone is GREEN (permitted airspace).")
 
+    # ── Temperature ───────────────────────────────────────────────────────────
+    temp = sensor_data.get("temperature", 25) or 25
+    if temp > 45:
+        critical_lines.append(f"Temperature is critically high at {temp}°C — electronics at risk.")
+    elif temp > 38:
+        caution_lines.append(f"Temperature is elevated at {temp}°C — monitor closely.")
+    elif temp < 0:
+        critical_lines.append(f"Temperature is {temp}°C — below freezing, icing risk.")
+    else:
+        ok_lines.append(f"Temperature is {temp}°C (normal).")
+
     # ── Rain / Humidity ───────────────────────────────────────────────────────
     rain_pct = round(rain_probability * 100)
     if rain_probability > 0.7:
@@ -155,11 +168,19 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
 
     humidity = sensor_data.get("humidity", 0) or 0
     if humidity > 90:
-        critical_lines.append(f"Humidity is critically high at {humidity}% — condensation risk.")
+        critical_lines.append(f"Humidity is critically high at {humidity:.0f}% — condensation risk.")
     elif humidity > 80:
-        caution_lines.append(f"Humidity is elevated at {humidity}%.")
+        caution_lines.append(f"Humidity is elevated at {humidity:.0f}%.")
     else:
-        ok_lines.append(f"Humidity is {humidity}% (normal).")
+        ok_lines.append(f"Humidity is {humidity:.0f}% (normal).")
+
+    # ── Water sensor ──────────────────────────────────────────────────────────
+    water = sensor_data.get("water_level", sensor_data.get("light_level", 0)) or 0
+    # water_level is not in _sensor_for_ml dict — check via rain_detected flag
+    if sensor_data.get("rain_detected", 0):
+        caution_lines.append("Water / rain sensor is active — moisture detected on the dock.")
+    else:
+        ok_lines.append("Water sensor is dry — no moisture detected.")
 
     # ── GPS Quality ───────────────────────────────────────────────────────────
     hdop = sensor_data.get("hdop", 0) or 0
@@ -178,7 +199,7 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
     else:
         ok_lines.append(f"Satellite count: {sats} (sufficient).")
 
-    # ── Vibration ─────────────────────────────────────────────────────────────
+    # ── Vibration / Tilt ──────────────────────────────────────────────────────
     vib = sensor_data.get("vibration_rms", 0) or 0
     if vib > 3.0:
         critical_lines.append(f"Vibration RMS={vib:.2f} — severe mechanical abnormality.")
@@ -187,6 +208,30 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
     else:
         ok_lines.append(f"Vibration RMS={vib:.2f} (normal).")
 
+    tilt = sensor_data.get("tilt_angle", 0) or 0
+    if tilt > 30:
+        critical_lines.append(f"Tilt angle is {tilt:.1f}° — drone is severely off-level.")
+    elif tilt > 15:
+        caution_lines.append(f"Tilt angle is {tilt:.1f}° — drone is slightly off-level.")
+    else:
+        ok_lines.append(f"Tilt angle is {tilt:.1f}° (level).")
+
+    # ── Current Draw ──────────────────────────────────────────────────────────
+    current = sensor_data.get("charge_current", 0) or 0
+    if current > 5:
+        critical_lines.append(f"Charging current is {current:.2f}A — overcurrent detected.")
+    elif current > 3.5:
+        caution_lines.append(f"Charging current is {current:.2f}A — near-limit draw.")
+    else:
+        ok_lines.append(f"Charging current is {current:.2f}A (within limits).")
+
+    # ── Ambient Light ─────────────────────────────────────────────────────────
+    ldr = sensor_data.get("light_level", 512) or 512
+    if ldr < 40:
+        caution_lines.append(f"Ambient light is very low (LDR={ldr}) — poor visibility conditions.")
+    else:
+        ok_lines.append(f"Ambient light level LDR={ldr} (adequate).")
+
     # ── Sensor Faults & Telemetry ─────────────────────────────────────────────
     if sensor_data.get("sensor_fault_flag", 0):
         critical_lines.append("Sensor fault flag is ACTIVE — system integrity compromised.")
@@ -194,20 +239,21 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
         ok_lines.append("No sensor faults detected.")
 
     if sensor_data.get("telemetry_loss", 0):
-        critical_lines.append("Telemetry loss has been reported — communication unreliable.")
+        critical_lines.append("Telemetry loss reported — communication unreliable.")
     else:
         ok_lines.append("Telemetry link is stable.")
 
     # ── Build output ──────────────────────────────────────────────────────────
-    lines = [f"UAV Safety Assessment — Decision: {decision} (score: {score:.1f}/100)", ""]
+    # Score is intentionally omitted — it was a stale DB value, not live.
+    lines = [f"UAV Safety Assessment — Decision: {decision}", ""]
 
-    lines.append("Risk Factors:")
+    lines.append("Sensor Analysis:")
     for line in critical_lines:
         lines.append(f"  ⚠ CRITICAL: {line}")
     for line in caution_lines:
         lines.append(f"  ⚡ CAUTION: {line}")
     if not critical_lines and not caution_lines:
-        lines.append("  ✓ No significant risk factors detected.")
+        lines.append("  ✓ All sensors within safe limits.")
     for line in ok_lines:
         lines.append(f"  ✓ {line}")
 
@@ -215,23 +261,23 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
     if decision == "Not Safe":
         rec = "Do NOT launch. Resolve all critical issues before attempting flight."
     elif decision == "Caution":
-        rec = "Exercise caution. Address warnings before extending the mission."
+        rec = "Exercise caution. Address all warnings before extending the mission."
     else:
-        rec = "Conditions are acceptable. Conduct normal pre-flight checklist and proceed."
+        rec = "All conditions acceptable. Conduct normal pre-flight checklist and proceed."
     lines.append(f"Operational Recommendation:\n  {rec}")
 
     lines.append("")
-    zone_label = f"zone {zone} ({'restricted' if zone == 'RED' else 'caution' if zone == 'YELLOW' else 'permitted'})"
+    zone_label = f"{zone} ({'restricted' if zone == 'RED' else 'caution area' if zone == 'YELLOW' else 'permitted'})"
     if critical_lines:
-        cause = "critical fault(s)"
+        cause = f"{len(critical_lines)} critical issue(s) detected"
     elif caution_lines:
-        cause = "caution-level conditions"
+        cause = f"{len(caution_lines)} caution condition(s) present"
     else:
-        cause = "nominal readings"
-    lines.append(f"Summary: ML safety score {score:.1f}/100 in {zone_label}.")
-    lines.append(f"Decision '{decision}' based on {cause}.")
+        cause = "all nominal"
+    lines.append(f"Zone: {zone_label}.  Status: {cause}.")
 
     return "\n".join(lines)
+
 
 
 # ── 5. LLM explanation via Ollama ─────────────────────────────────────────────

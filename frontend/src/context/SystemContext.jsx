@@ -94,11 +94,14 @@ function buildSimState(prev, failsafe) {
     triggered_l2: failsafe ? [] : ["LOW_SATELLITES (2)"],
     triggered_l3: [],
 
-    // ML Engine
-    ml_decision: failsafe ? "Not Safe" : "Safe",
+    // ML Engine — rotate through 3 states when backend is offline
+    ml_decision: failsafe ? "Not Safe" : (Math.random() < 0.5 ? "Caution" : "Safe"),
     ml_explanation: failsafe
-      ? `UAV Safety Assessment — Decision: Not Safe (score: 85.0/100)\n\nRisk Factors:\n  ⚠ CRITICAL: Zone is RED (restricted) — flight is prohibited.\n  ⚠ CRITICAL: Sensor fault detected — system integrity compromised.\n  ⚠ CRITICAL: Vibration RMS=6.10 — severe mechanical abnormality.\n\nOperational Recommendation:\n  Do NOT launch. Resolve all critical issues before attempting flight.\n\nSummary: ML safety score 85.0/100 in zone RED (restricted).\nDecision 'Not Safe' based on critical fault(s).`
-      : `UAV Safety Assessment — Decision: Safe (score: 18.0/100)\n\nRisk Factors:\n  ✓ No significant risk factors detected.\n\nOperational Recommendation:\n  Conditions are acceptable. Conduct normal pre-flight checklist and proceed.\n\nSummary: ML safety score 18.0/100 in zone GREEN (permitted).\nDecision 'Safe' based on nominal readings.`,
+      ? `UAV Safety Assessment — Decision: Not Safe\n\nSensor Analysis:\n  ⚠ CRITICAL: Zone is RED (restricted airspace) — flight is prohibited.\n  ⚠ CRITICAL: Sensor fault flag is ACTIVE — system integrity compromised.\n  ⚠ CRITICAL: Vibration RMS=6.10 — severe mechanical abnormality.\n  ⚠ CRITICAL: Humidity is critically high at 95% — condensation risk.\n  ⚡ CAUTION: Water / rain sensor is active — moisture detected on the dock.\n\nOperational Recommendation:\n  Do NOT launch. Resolve all critical issues before attempting flight.\n\nZone: RED (restricted).  Status: 4 critical issue(s) detected.`
+      : (Math.random() < 0.5
+        ? `UAV Safety Assessment — Decision: Caution\n\nSensor Analysis:\n  ⚡ CAUTION: Zone is YELLOW (caution area) — proceed only if authorised.\n  ⚡ CAUTION: Humidity is elevated at 85%.\n  ⚡ CAUTION: Low satellite count: 3 (minimum 5 recommended).\n  ⚡ CAUTION: GPS accuracy is marginal — HDOP=3.2.\n  ✓ Temperature is 29.1°C (normal).\n  ✓ No sensor faults detected.\n\nOperational Recommendation:\n  Exercise caution. Address all warnings before extending the mission.\n\nZone: YELLOW (caution area).  Status: 4 caution condition(s) present.`
+        : `UAV Safety Assessment — Decision: Safe\n\nSensor Analysis:\n  ✓ All sensors within safe limits.\n  ✓ Zone is GREEN (permitted airspace).\n  ✓ Temperature is 27.4°C (normal).\n  ✓ Humidity is 58% (normal).\n  ✓ GPS HDOP=1.1 (good accuracy).\n  ✓ Satellite count: 9 (sufficient).\n  ✓ No sensor faults detected.\n\nOperational Recommendation:\n  All conditions acceptable. Conduct normal pre-flight checklist and proceed.\n\nZone: GREEN (permitted).  Status: all nominal.`),
+
   };
   return base;
 }
@@ -199,16 +202,12 @@ export function SystemProvider({ children }) {
         // Avoids a React re-render and avoids spamming the history chart
         // when the backend is up but no new sensor data has arrived.
         setState(prev => {
-          if (
-            prev &&
-            prev.risk_level === transformed.risk_level &&
-            prev.risk_index === transformed.risk_index &&
-            prev.safety_score === transformed.safety_score &&
-            prev.timestamp === transformed.timestamp &&
-            prev.ml_explanation === transformed.ml_explanation &&
-            prev.ml_decision === transformed.ml_decision
-          ) {
-            return prev;  // bail out — same data, no re-render
+          // Only skip re-render if the backend timestamp hasn't changed,
+          // meaning no new sensor row has arrived. We deliberately do NOT
+          // compare ml_explanation here — that string is regenerated each
+          // poll and can look identical even when sensor values have shifted.
+          if (prev && prev.timestamp === transformed.timestamp) {
+            return prev;  // bail out — same sensor row, no re-render needed
           }
           return transformed;
         });

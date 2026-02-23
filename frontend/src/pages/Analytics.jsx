@@ -88,7 +88,7 @@ export default function Analytics() {
                             <XAxis dataKey="t" hide />
                             <YAxis domain={[0, 100]} tick={{ fill: "#4b5563", fontSize: 10 }} />
                             <Tooltip
-                                contentStyle={{ background: "#121E2D", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12 }}
+                                contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                                 formatter={v => [`${Number(v).toFixed(1)}`, "Risk Index"]}
                                 labelFormatter={() => ""}
                             />
@@ -109,7 +109,7 @@ export default function Analytics() {
                                 ))}
                             </Pie>
                             <Tooltip
-                                contentStyle={{ background: "#121E2D", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12 }}
+                                contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                             />
                             <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
                         </PieChart>
@@ -125,7 +125,7 @@ export default function Analytics() {
                             <XAxis dataKey="t" hide />
                             <YAxis domain={[0, 100]} tick={{ fill: "#4b5563", fontSize: 10 }} />
                             <Tooltip
-                                contentStyle={{ background: "#121E2D", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12 }}
+                                contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                                 formatter={v => [`${Number(v).toFixed(1)}%`, "Safety"]}
                                 labelFormatter={() => ""}
                             />
@@ -147,7 +147,7 @@ export default function Analytics() {
                             <XAxis dataKey="t" hide />
                             <YAxis tick={{ fill: "#4b5563", fontSize: 10 }} />
                             <Tooltip
-                                contentStyle={{ background: "#121E2D", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12 }}
+                                contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                                 formatter={v => [`${Number(v).toFixed(2)} °/s`, "RMS"]}
                                 labelFormatter={() => ""}
                             />

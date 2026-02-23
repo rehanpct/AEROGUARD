@@ -409,7 +409,7 @@ export default function Dashboard() {
                             <XAxis dataKey="t" hide />
                             <YAxis domain={[0, 100]} hide />
                             <Tooltip
-                                contentStyle={{ background: "#121E2D", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12 }}
+                                contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                                 formatter={v => [`${v.toFixed(1)}`, "Risk"]}
                                 labelFormatter={() => ""}
                             />

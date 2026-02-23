@@ -93,8 +93,12 @@ def _build_ml_input(payload: dict, zone: str) -> dict:
 
 @telemetry_bp.route("/telemetry", methods=["POST"])
 def ingest_telemetry():
-    # Signal simulator to stop (no-op if sim file not loaded)
-    if _dev_sim is not None:
+    # Signal simulator to stop ONLY when real hardware posts.
+    # The simulator and test scripts send X-Source: simulator / test
+    # so we skip the signal for their own requests — otherwise the
+    # simulator kills itself on round 0.
+    _source = request.headers.get("X-Source", "").lower()
+    if _dev_sim is not None and _source not in ("simulator", "test"):
         _dev_sim.signal_hardware_connected()
 
     payload = request.get_json(force=True, silent=True) or {}

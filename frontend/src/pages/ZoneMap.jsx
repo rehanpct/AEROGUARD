@@ -204,15 +204,15 @@ export default function ZoneMap() {
                     <svg
                         viewBox="0 0 100 100"
                         preserveAspectRatio="xMidYMid meet"
-                        style={{ width: "100%", display: "block", background: "#0B1020" }}
+                        style={{ width: "100%", display: "block", background: "#050505" }}
                     >
                         {/* Background grid */}
                         {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(v => (
                             <g key={v}>
                                 <line x1={v} y1={0} x2={v} y2={100}
-                                    stroke="#1a2744" strokeWidth={0.25} />
+                                    stroke="rgba(255,255,255,0.05)" strokeWidth={0.25} />
                                 <line x1={0} y1={v} x2={100} y2={v}
-                                    stroke="#1a2744" strokeWidth={0.25} />
+                                    stroke="rgba(255,255,255,0.05)" strokeWidth={0.25} />
                             </g>
                         ))}
 
@@ -221,14 +221,14 @@ export default function ZoneMap() {
                             const { x } = coordToSvg(10, lon);
                             return (
                                 <text key={lon} x={x} y={99} textAnchor="middle"
-                                    fontSize={2.2} fill="#1e3a5f">{lon}°E</text>
+                                    fontSize={2.2} fill="rgba(255,255,255,0.2)">{lon}°E</text>
                             );
                         })}
                         {[9, 10, 11, 12, 13].map(lat => {
                             const { y } = coordToSvg(lat, 74.5);
                             return (
                                 <text key={lat} x={1} y={y} textAnchor="start"
-                                    dominantBaseline="middle" fontSize={2.2} fill="#1e3a5f">{lat}°N</text>
+                                    dominantBaseline="middle" fontSize={2.2} fill="rgba(255,255,255,0.2)">{lat}°N</text>
                             );
                         })}
 

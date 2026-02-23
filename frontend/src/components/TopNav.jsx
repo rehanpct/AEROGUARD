@@ -17,7 +17,7 @@ export default function TopNav() {
     return (
         <nav style={{
             height: '72px',
-            background: 'rgba(13,25,44,0.95)',
+            background: 'var(--bg-card)',
             borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
@@ -32,9 +32,10 @@ export default function TopNav() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
                     width: 36, height: 36, borderRadius: 10,
-                    background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+                    background: 'linear-gradient(135deg, #27272A, #09090B)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 0 16px rgba(59,130,246,0.4)',
+                    boxShadow: '0 0 16px rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border)',
                 }}>
                     <Shield size={20} color="white" />
                 </div>
@@ -86,8 +87,9 @@ export default function TopNav() {
                 }}>
                     <div style={{
                         width: 28, height: 28, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #3B82F6, #7C3AED)',
+                        background: 'linear-gradient(135deg, #27272A, #09090B)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '1px solid var(--border)'
                     }}>
                         <User size={14} color="white" />
                     </div>
