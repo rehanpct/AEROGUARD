@@ -30,6 +30,7 @@ app.register_blueprint(zone_bp,      url_prefix="/api")
 
 @app.route("/")
 def index():
+    print("done")
     return {"message": "AeroGuard Backend Running", "version": "1.0.0"}, 200
 
 if __name__ == "__main__":
