@@ -239,7 +239,7 @@ def generate_explanation(sensor_data: dict, rain_probability: float,
 def generate_explanation_llm(sensor_data: dict, rain_probability: float,
                               score: float, decision: str,
                               ollama_url: str = "http://localhost:11434/api/generate",
-                              model: str = "llama3") -> str:
+                              model: str = "phi3:mini") -> str:
     """
     Calls a local Ollama server for a natural-language explanation.
     Falls back to generate_explanation() if the server is unreachable.
