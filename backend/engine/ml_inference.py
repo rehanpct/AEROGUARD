@@ -110,109 +110,7 @@ def safety_decision(score: float) -> str:
     else:
         return "Safe"
 
-
-# ── 4. Feature explanation (no LLM required) ─────────────────────────────────
-
-def generate_explanation(sensor_data: dict, rain_probability: float,
-                          score: float, decision: str) -> str:
-    """
-    Rule-based natural-language explanation of the ML output.
-    Replaces the Ollama/llama3 call from the reference script so the backend
-    works without a running LLM server.
-
-    If you DO have Ollama running locally, call generate_explanation_llm()
-    instead and it will use the original prompt.
-    """
-    lines = [
-        f"UAV Safety Assessment — Decision: {decision} (score: {score:.1f}/100)",
-        "",
-        "Risk Factors:",
-    ]
-
-    risks = []
-    cautions = []
-
-    z = int(sensor_data.get("zone_encoded", 1))
-    zone_name = {0: "GREEN (permitted)", 1: "YELLOW (caution)", 2: "RED (restricted)"}.get(z, "Unknown")
-    if z == 2:
-        risks.append(f"Zone is RED (restricted) — flight is prohibited.")
-    elif z == 1:
-        cautions.append(f"Zone is YELLOW — authorisation may be required.")
-
-    if sensor_data.get("sensor_fault_flag", 0):
-        risks.append("Sensor fault detected — system integrity compromised.")
-
-    if sensor_data.get("telemetry_loss", 0):
-        risks.append("Telemetry loss reported — loss of situational awareness.")
-
-    hdop = sensor_data.get("hdop", 1.0)
-    if hdop > 5.0:
-        risks.append(f"HDOP={hdop:.1f} — GPS accuracy very poor.")
-    elif hdop > 2.0:
-        cautions.append(f"HDOP={hdop:.1f} — GPS accuracy moderate.")
-
-    sats = sensor_data.get("satellites", 8)
-    if sats < 4:
-        risks.append(f"Only {sats} satellites — insufficient for safe navigation.")
-    elif sats < 6:
-        cautions.append(f"{sats} satellites — marginal coverage.")
-
-    vib = sensor_data.get("vibration_rms", 0.0)
-    if vib > 3.0:
-        risks.append(f"Vibration RMS={vib:.2f} — severe mechanical abnormality.")
-    elif vib > 1.5:
-        cautions.append(f"Vibration RMS={vib:.2f} — elevated, monitor during flight.")
-
-    rain_pct = rain_probability * 100
-    if rain_pct > 70:
-        risks.append(f"Rain probability {rain_pct:.0f}% — high precipitation risk.")
-    elif rain_pct > 40:
-        cautions.append(f"Rain probability {rain_pct:.0f}% — monitor conditions.")
-
-    temp = sensor_data.get("temperature", 25.0)
-    if temp > 45:
-        risks.append(f"Temperature {temp}°C — overheating risk to electronics.")
-    elif temp < -5:
-        risks.append(f"Temperature {temp}°C — battery performance severely degraded.")
-
-    cv = sensor_data.get("current_variation", 0.0)
-    if cv > 0.8:
-        cautions.append(f"Charging current variation {cv:.2f}A — power supply unstable.")
-
-    tilt = sensor_data.get("tilt_angle", 0.0)
-    if tilt > 30:
-        risks.append(f"Tilt angle {tilt:.1f}° — drone not level, check placement.")
-
-    for r in risks:
-        lines.append(f"  ⚠ CRITICAL: {r}")
-    for c in cautions:
-        lines.append(f"  ⚡ CAUTION:  {c}")
-
-    if not risks and not cautions:
-        lines.append("  ✓ No significant risk factors detected.")
-
-    lines += [
-        "",
-        "Operational Recommendation:",
-    ]
-    if decision == "Not Safe":
-        lines.append("  Do NOT launch. Resolve all critical issues before attempting flight.")
-    elif decision == "Caution":
-        lines.append("  Proceed with heightened awareness. Monitor all flagged parameters continuously.")
-        lines.append("  Consider postponing until conditions improve.")
-    else:
-        lines.append("  Conditions are acceptable. Conduct normal pre-flight checklist and proceed.")
-
-    lines += [
-        "",
-        f"Summary: ML safety score {score:.1f}/100 in zone {zone_name}.",
-        f"Decision '{decision}' based on {'critical fault(s)' if risks else 'marginal condition(s)' if cautions else 'nominal readings'}.",
-    ]
-
-    return "\n".join(lines)
-
-
-# ── 4b. Optional: LLM explanation via Ollama (reference script version) ───────
+# ── 4. LLM explanation via Ollama ───────
 
 def generate_explanation_llm(sensor_data: dict, rain_probability: float,
                               score: float, decision: str,
@@ -244,17 +142,6 @@ Explain clearly:
 4. Operational recommendation.
 5. Two-line summary.
 """
-    try:
-        resp = _requests.post(
-            ollama_url,
-            json={"model": model, "prompt": prompt, "stream": False,
-                  "options": {"temperature": 0.2}},
-            timeout=30,
-        )
-        return resp.json()["response"]
-    except Exception:
-        return generate_explanation(sensor_data, rain_probability, score, decision)
-
 
 # ── 5. Master pipeline (mirrors reference script's evaluate_uav) ──────────────
 
@@ -282,8 +169,6 @@ def evaluate_uav(sensor_data: dict, use_llm: bool = False,
 
     if use_llm:
         explanation = generate_explanation_llm(sensor_data, rain_prob, score, decision, ollama_url)
-    else:
-        explanation = generate_explanation(sensor_data, rain_prob, score, decision)
 
     return {
         "rain_probability": round(rain_prob, 4),
