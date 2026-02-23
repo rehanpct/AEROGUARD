@@ -9,7 +9,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from database import get_db
 from constants import GPS_FALLBACK_LAT as FALLBACK_LAT, GPS_FALLBACK_LON as FALLBACK_LON, GPS_FALLBACK_NAME as FALLBACK_NAME
-from engine.ml_inference import generate_explanation, compute_rain_probability, safety_decision
+from engine.ml_inference import generate_explanation_llm, compute_rain_probability, safety_decision
 
 
 log = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def get_status():
                 "telemetry_loss": 0, "charge_current": 1.5, "current_variation": 0.0,
                 "dock_voltage": 14.4, "charging_state": 1,
             }
-            _default_expl = generate_explanation(_default_sensor, 0.0, 20.0, "Safe")
+            _default_expl = generate_explanation_llm(_default_sensor, 0.0, 20.0, "Safe")
             return jsonify({
                 "status": "NO_DATA",
                 "message": "No telemetry received yet. Waiting for Arduino...",
@@ -126,7 +126,7 @@ def get_status():
             "charging_state":   1,
         }
         try:
-            ml_explanation = generate_explanation(_sensor_for_ml, rain_prob, float(_ml_score), _ml_decision_str)
+            ml_explanation = generate_explanation_llm(_sensor_for_ml, rain_prob, float(_ml_score), _ml_decision_str)
         except Exception as e:
             log.warning("ML explanation error: %s", e)
             ml_explanation = "ML explanation unavailable."
